@@ -5,6 +5,7 @@ import os
 from werkzeug.utils import secure_filename
 from pymongo import MongoClient # 🆕 NEW: Import MongoDB client
 import datetime                 # 🆕 NEW: To timestamp our reports
+from bson.objectid import ObjectId
 
 app = Flask(__name__)
 CORS(app) 
@@ -57,16 +58,37 @@ def detect_pothole():
                 })
 
         # 🆕 NEW: Save this report to MongoDB!
+        # report_data = {
+        #     'image_filename': filename,
+        #     'pothole_count': len(detections),
+        #     'detections': detections,
+        #     'status': 'Pending', # Default status for authorities
+        #     'reported_at': datetime.datetime.utcnow()
+        # }
+        # ... (previous code above stays the same) ...
+
+        # 🆕 NEW: Get latitude and longitude from the request if they exist
+        lat = request.form.get('latitude')
+        lng = request.form.get('longitude')
+
+        # 🆕 NEW: Save this report to MongoDB, now including the real GPS data!
         report_data = {
             'image_filename': filename,
             'pothole_count': len(detections),
             'detections': detections,
-            'status': 'Pending', # Default status for authorities
-            'reported_at': datetime.datetime.utcnow()
+            'status': 'Pending',
+            'reported_at': datetime.datetime.utcnow(),
+            # Convert to float for mapping math, or save as None if user denied location
+            'latitude': float(lng) if lng else None, 
+            'longitude': float(lat) if lat else None 
         }
-        
-        # Insert into database and get the generated ID
+        print(float(lat))
+        print(float(lng))
         inserted_report = reports_collection.insert_one(report_data)
+
+        # ... (return statement stays the same) ...
+        # # Insert into database and get the generated ID
+        # inserted_report = reports_collection.insert_one(report_data)
 
         return jsonify({
             'message': 'Detection complete and saved to database!',
@@ -85,6 +107,30 @@ def get_reports():
         reports.append(report)
     
     return jsonify(reports), 200
+
+# 🆕 NEW: Update report status (Admin feature)
+@app.route('/api/reports/<report_id>/status', methods=['PUT'])
+def update_status(report_id):
+    data = request.json
+    new_status = data.get('status')
+    
+    if not new_status:
+        return jsonify({'error': 'No status provided'}), 400
+        
+    try:
+        # Find the report by its MongoDB ID and update its status
+        result = reports_collection.update_one(
+            {'_id': ObjectId(report_id)},
+            {'$set': {'status': new_status}}
+        )
+        
+        if result.modified_count == 1:
+            return jsonify({'message': 'Status updated successfully!'}), 200
+        else:
+            return jsonify({'message': 'Status was already set to this value.'}), 200
+            
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
 
 if __name__ == '__main__':
     app.run(debug=True, port=5000)
