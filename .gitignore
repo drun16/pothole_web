@@ -21,8 +21,8 @@ yarn-debug.log*
 yarn-error.log*
 
 # Build output
-frontend/build/
-frontend/.cache/
+# frontend/build/
+# frontend/.cache/
 
 # ---- General ----
 .DS_Store
